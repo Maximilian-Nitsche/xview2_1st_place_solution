@@ -1,50 +1,43 @@
 import os
+
 os.environ["MKL_NUM_THREADS"] = "2" 
 os.environ["NUMEXPR_NUM_THREADS"] = "2" 
 os.environ["OMP_NUM_THREADS"] = "2" 
 
-from os import path, makedirs, listdir
 import sys
+from os import listdir, makedirs, path
+
 import numpy as np
+
 np.random.seed(1)
 import random
+
 random.seed(1)
 
+import gc
+import timeit
+
+import cv2
 import torch
+import torch.optim.lr_scheduler as lr_scheduler
+from adamw import AdamW
+from apex import amp
+from imgaug import augmenters as iaa
+from losses import ComboLoss, dice_round
+from skimage.morphology import dilation, square
+from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.backends import cudnn
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-import torch.optim.lr_scheduler as lr_scheduler
-
-from apex import amp
-
-from adamw import AdamW
-from losses import dice_round, ComboLoss
-
-import pandas as pd
+from torch.utils.data import DataLoader, Dataset
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
-import timeit
-import cv2
-
-from zoo.models import Res34_Unet_Double
-
-from imgaug import augmenters as iaa
-
 from utils import *
-
-from skimage.morphology import square, dilation
-
-from sklearn.model_selection import train_test_split
-
-from sklearn.metrics import accuracy_score
-
-import gc
+from zoo.models import Res34_Unet_Double
 
 cv2.setNumThreads(0)
 cv2.ocl.setUseOpenCL(False)
 
-train_dirs = ['train', 'tier3']
+train_dirs = ['train', 'tier3', 'hold', 'test']
 
 models_folder = 'weights'
 
@@ -56,7 +49,7 @@ input_shape = (608, 608)
 all_files = []
 for d in train_dirs:
     for f in sorted(listdir(path.join(d, 'images'))):
-        if '_pre_disaster.png' in f:
+        if '_pre_disaster.png' in f and 'hurricane-harvey' not in f:
             all_files.append(path.join(d, 'images', f))
 
 
@@ -359,7 +352,7 @@ def evaluate_val(data_val, best_score, model, snapshot_name, current_epoch):
         best_score = d
 
     print("score: {}\tscore_best: {}".format(d, best_score))
-    return best_score
+    return best_score, d
 
 
 def train_epoch(current_epoch, seg_loss, ce_loss, model, optimizer, scheduler, train_data_loader):
@@ -407,6 +400,8 @@ def train_epoch(current_epoch, seg_loss, ce_loss, model, optimizer, scheduler, t
 
     print("epoch: {}; lr {:.7f}; Loss {loss.avg:.4f}; loss2 {loss1.avg:.4f}; Dice {dice.avg:.4f}".format(
             current_epoch, scheduler.get_lr()[-1], loss=losses, loss1=losses1, dice=dices))
+    
+    return losses, dices
 
 
 if __name__ == '__main__':
@@ -496,11 +491,17 @@ if __name__ == '__main__':
 
     best_score = 0
     torch.cuda.empty_cache()
+    tb = SummaryWriter(f"./runs/train34_cls_{seed}")
     for epoch in range(20):
-        train_epoch(epoch, seg_loss, ce_loss, model, optimizer, scheduler, train_data_loader)
+        losses, dices = train_epoch(epoch, seg_loss, ce_loss, model, optimizer, scheduler, train_data_loader)
+        tb.add_scalar("Epoch loss", losses.avg, epoch)
+        tb.add_scalar("Epoch dices", dices.avg, epoch)
+
         if epoch % 2 == 0:
             torch.cuda.empty_cache()
-            best_score = evaluate_val(val_data_loader, best_score, model, snapshot_name, epoch)
+            best_score, val_score = evaluate_val(val_data_loader, best_score, model, snapshot_name, epoch)
+            tb.add_scalar("Best val score", best_score, epoch)
+            tb.add_scalar("Val score", val_score, epoch)
 
     elapsed = timeit.default_timer() - t0
     print('Time: {:.3f} min'.format(elapsed / 60))

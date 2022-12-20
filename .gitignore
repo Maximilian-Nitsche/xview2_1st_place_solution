@@ -2,3 +2,9 @@ train
 test
 tier3
 hold
+pred_loc_val
+weights
+logs
+runs
+*.pyc
+*.ipynb
