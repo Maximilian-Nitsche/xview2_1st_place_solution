@@ -58,8 +58,7 @@ if __name__ == '__main__':
     
 
     with torch.no_grad():
-        for f in tqdm(sorted(glob("./**/images/hurricane-harvey_*_pre_disaster.png"))):
-            fn = path.join(test_dir, f)
+        for fn in tqdm(sorted(glob("./**/images/hurricane-harvey_*_pre_disaster.png"))):
 
             img = cv2.imread(fn, cv2.IMREAD_COLOR)
             img = preprocess_inputs(img)
@@ -88,7 +87,7 @@ if __name__ == '__main__':
             
             msk = pred_full * 255
             msk = msk.astype('uint8').transpose(1, 2, 0)
-            cv2.imwrite(path.join(pred_folder, '{0}.png'.format(f.replace('.png', '_part1.png'))), msk[..., 0], [cv2.IMWRITE_PNG_COMPRESSION, 9])
+            cv2.imwrite(path.join(pred_folder, '{0}.png'.format(os.path.basename(fn).replace('.png', '_part1.png'))), msk[..., 0], [cv2.IMWRITE_PNG_COMPRESSION, 9])
 
     elapsed = timeit.default_timer() - t0
     print('Time: {:.3f} min'.format(elapsed / 60))

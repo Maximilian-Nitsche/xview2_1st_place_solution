@@ -3,6 +3,11 @@ test
 tier3
 hold
 pred_loc_val
+pred34_loc
+res34cls2_0_tuned
+res34cls2_1_tuned
+res34cls2_2_tuned
+submission-hurricane_harvey
 weights
 logs
 runs
